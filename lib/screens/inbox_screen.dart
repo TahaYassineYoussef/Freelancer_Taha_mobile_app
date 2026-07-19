@@ -199,7 +199,10 @@ class _MessageCardState extends State<_MessageCard> {
         child: InkWell(
           // Reading is a one-way action, so only unread cards react to a tap.
           onTap: dim || _busy ? null : () => _run(() => widget.api.markMessageRead(message.id)),
-          child: Row(
+          // IntrinsicHeight gives the Row a real height so the stretched accent
+          // bar can size itself; without it the card collapses inside the list.
+          child: IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Gold accent marks the unread ones.
@@ -288,6 +291,7 @@ class _MessageCardState extends State<_MessageCard> {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

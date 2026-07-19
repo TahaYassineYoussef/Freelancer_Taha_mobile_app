@@ -119,7 +119,10 @@ class _NotificationCard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: dim ? null : onRead,
-          child: Row(
+          // IntrinsicHeight gives the Row a real height so the stretched accent
+          // bar can size itself; without it the card collapses inside the list.
+          child: IntrinsicHeight(
+            child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               // Gold accent marks the unread ones.
@@ -175,6 +178,7 @@ class _NotificationCard extends StatelessWidget {
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),

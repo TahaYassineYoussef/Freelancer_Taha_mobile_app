@@ -306,6 +306,30 @@ class ApiService {
     _decode(res);
   }
 
+  Future<PaymentSettings> paymentSettings() async {
+    final res = await http.get(_uri('/admin/payment-settings'), headers: _headers);
+    return PaymentSettings.fromJson(_decode(res));
+  }
+
+  Future<String> savePaymentSettings({
+    required String paypalEmail,
+    required String paypalClientId,
+    required bool paypalEnabled,
+    required String d17Number,
+    required bool d17Enabled,
+  }) async {
+    final res = await http.patch(_uri('/admin/payment-settings'),
+        headers: _headers,
+        body: jsonEncode({
+          'paypal_email': paypalEmail.isEmpty ? null : paypalEmail,
+          'paypal_client_id': paypalClientId.isEmpty ? null : paypalClientId,
+          'paypal_enabled': paypalEnabled,
+          'd17_number': d17Number.isEmpty ? null : d17Number,
+          'd17_enabled': d17Enabled,
+        }));
+    return _decode(res)['message'] ?? 'Payment settings saved.';
+  }
+
   Future<CvOverview> cv() async {
     final res = await http.get(_uri('/admin/cv'), headers: _headers);
     return CvOverview.fromJson(_decode(res));

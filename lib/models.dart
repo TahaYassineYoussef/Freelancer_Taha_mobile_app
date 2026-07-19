@@ -501,12 +501,14 @@ class FreelancerDashboard {
   final FreelancerKpis kpis;
   final Map<String, int> counts;
   final List<LatestClient> latestClients;
+  final ChartSeries chart;
 
   FreelancerDashboard({
     required this.kpis,
     this.counts = const {},
     this.latestClients = const [],
-  });
+    ChartSeries? chart,
+  }) : chart = chart ?? ChartSeries();
 
   factory FreelancerDashboard.fromJson(Map<String, dynamic> j) => FreelancerDashboard(
         kpis: FreelancerKpis.fromJson((j['kpis'] as Map?)?.cast<String, dynamic>() ?? {}),
@@ -514,6 +516,7 @@ class FreelancerDashboard {
             .map((k, v) => MapEntry(k.toString(), _asInt(v) ?? 0)),
         latestClients:
             (j['latest_clients'] as List? ?? []).map((e) => LatestClient.fromJson(e)).toList(),
+        chart: ChartSeries.fromJson((j['chart'] as Map?)?.cast<String, dynamic>()),
       );
 }
 
@@ -663,13 +666,15 @@ class VisitorStats {
   final List<LabelCount> topPages;
   final List<LabelCount> topReferrers;
   final List<LabelCount> devices;
+  final ChartSeries chart;
 
   VisitorStats({
     this.kpis = const {},
     this.topPages = const [],
     this.topReferrers = const [],
     this.devices = const [],
-  });
+    ChartSeries? chart,
+  }) : chart = chart ?? ChartSeries();
 
   static List<LabelCount> _rows(dynamic v) =>
       (v as List? ?? []).map((e) => LabelCount.fromJson(e)).toList();
@@ -679,6 +684,7 @@ class VisitorStats {
         topPages: _rows(j['top_pages']),
         topReferrers: _rows(j['top_referrers']),
         devices: _rows(j['devices']),
+        chart: ChartSeries.fromJson((j['chart'] as Map?)?.cast<String, dynamic>()),
       );
 }
 
@@ -842,6 +848,78 @@ class CvOverview {
     return CvOverview(
       profile: p,
       counts: {for (final s in sections) s: (j[s] as List? ?? []).length},
+    );
+  }
+}
+
+/// Daily / weekly / monthly buckets behind the activity chart.
+class ChartSeries {
+  final List<LabelCount> daily;
+  final List<LabelCount> weekly;
+  final List<LabelCount> monthly;
+
+  ChartSeries({this.daily = const [], this.weekly = const [], this.monthly = const []});
+
+  List<LabelCount> of(String range) => switch (range) {
+        'weekly' => weekly,
+        'monthly' => monthly,
+        _ => daily,
+      };
+
+  bool get isEmpty => daily.isEmpty && weekly.isEmpty && monthly.isEmpty;
+
+  /// The API sends `{label, value}`; [LabelCount] stores it as `count`.
+  static List<LabelCount> _points(dynamic v) => (v as List? ?? [])
+      .map((e) => LabelCount(
+            label: e['label']?.toString() ?? '',
+            count: _asInt(e['value']) ?? 0,
+          ))
+      .toList();
+
+  factory ChartSeries.fromJson(Map<String, dynamic>? j) => ChartSeries(
+        daily: _points(j?['daily']),
+        weekly: _points(j?['weekly']),
+        monthly: _points(j?['monthly']),
+      );
+}
+
+/// Where the freelancer receives money. The enable flags show or hide each
+/// method for clients while the credentials stay saved.
+class PaymentSettings {
+  final String paypalEmail;
+  final String paypalClientId;
+  final bool paypalEnabled;
+  final String d17Number;
+  final bool d17Enabled;
+  final String? d17QrUrl;
+  final bool envPaypalClientId;
+  final String paypalMode;
+  final String currency;
+
+  PaymentSettings({
+    this.paypalEmail = '',
+    this.paypalClientId = '',
+    this.paypalEnabled = false,
+    this.d17Number = '',
+    this.d17Enabled = false,
+    this.d17QrUrl,
+    this.envPaypalClientId = false,
+    this.paypalMode = 'sandbox',
+    this.currency = 'USD',
+  });
+
+  factory PaymentSettings.fromJson(Map<String, dynamic> j) {
+    final s = (j['settings'] as Map?) ?? {};
+    return PaymentSettings(
+      paypalEmail: s['paypal_email']?.toString() ?? '',
+      paypalClientId: s['paypal_client_id']?.toString() ?? '',
+      paypalEnabled: s['paypal_enabled'] == true,
+      d17Number: s['d17_number']?.toString() ?? '',
+      d17Enabled: s['d17_enabled'] == true,
+      d17QrUrl: mediaUrl(s['d17_qr_url']),
+      envPaypalClientId: j['env_paypal_client_id'] == true,
+      paypalMode: j['paypal_mode']?.toString() ?? 'sandbox',
+      currency: j['currency']?.toString() ?? 'USD',
     );
   }
 }

@@ -10,6 +10,7 @@ import 'bookings_screen.dart';
 import 'contact_screen.dart';
 import 'inbox_screen.dart';
 import 'manage_cv_screen.dart';
+import 'payment_settings_screen.dart';
 import 'notifications_screen.dart';
 import 'profile_screen.dart';
 import 'review_moderation_screen.dart';
@@ -72,6 +73,7 @@ class AppDrawer extends StatelessWidget {
                     _Push(icon: Icons.mail_outline, label: i18n.t('Inbox'), screen: const InboxScreen()),
                     _Push(icon: Icons.insights_outlined, label: i18n.t('Visitors'), screen: const VisitorsScreen()),
                     _Push(icon: Icons.shield_outlined, label: i18n.t('Blocked'), screen: const BlockedScreen()),
+                    _Push(icon: Icons.credit_card, label: i18n.t('Payment Settings'), screen: const PaymentSettingsScreen()),
                     _Push(icon: Icons.description_outlined, label: i18n.t('Manage CV'), screen: const ManageCvScreen()),
                     const _Divider(),
                   ],

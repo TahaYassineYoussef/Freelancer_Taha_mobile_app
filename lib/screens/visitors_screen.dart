@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/api_service.dart';
 import '../state/auth.dart';
 import '../theme.dart';
+import 'activity_chart.dart';
 
 const _online = Color(0xFF34D399);
 
@@ -92,6 +93,7 @@ class _VisitorsScreenState extends State<VisitorsScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                ActivityChart(title: 'Traffic', series: stats.chart),
                 _Card(
                   title: 'Last 30 days',
                   child: Column(

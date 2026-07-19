@@ -5,6 +5,7 @@ import '../models.dart';
 import '../services/api_service.dart';
 import '../state/auth.dart';
 import '../theme.dart';
+import 'activity_chart.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -99,6 +100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 12),
+                ActivityChart(title: 'Task Progress', series: data.chart),
                 _Card(
                   title: 'Queues',
                   child: Column(
