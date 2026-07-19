@@ -383,6 +383,19 @@ class ApiService {
     _decode(res);
   }
 
+  /// Registers this device for call pushes.
+  Future<void> registerDevice(String token) async {
+    final res = await http.post(_uri('/devices'),
+        headers: _headers, body: jsonEncode({'token': token, 'platform': 'android'}));
+    _decode(res);
+  }
+
+  Future<void> forgetDevice(String token) async {
+    final res = await http.delete(_uri('/devices'),
+        headers: _headers, body: jsonEncode({'token': token}));
+    _decode(res);
+  }
+
   // ---- Deliveries --------------------------------------------------------
 
   Future<List<Delivery>> deliveries() async {

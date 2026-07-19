@@ -1,4 +1,4 @@
-package com.example.freelancertaha
+package com.freelance.freelancetahaapp
 
 import android.net.Uri
 import androidx.browser.customtabs.CustomTabsIntent

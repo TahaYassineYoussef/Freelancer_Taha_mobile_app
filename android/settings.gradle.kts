@@ -21,6 +21,8 @@ plugins {
     // 8.9.1+ is required by androidx.browser 1.9 (ephemeral Custom Tabs).
     id("com.android.application") version "8.9.1" apply false
     id("org.jetbrains.kotlin.android") version "2.1.0" apply false
+    // Reads google-services.json so Firebase Messaging can register the device.
+    id("com.google.gms.google-services") version "4.4.2" apply false
 }
 
 include(":app")

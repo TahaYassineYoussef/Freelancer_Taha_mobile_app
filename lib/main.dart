@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'screens/call_overlay.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
+import 'services/push_service.dart';
 import 'state/auth.dart';
 import 'state/call_state.dart';
 import 'state/i18n.dart';
@@ -68,8 +69,15 @@ class _AuthGateState extends State<_AuthGate> {
   void _syncCallListener(bool loggedIn) {
     if (loggedIn == _listening) return;
     _listening = loggedIn;
+    final auth = context.read<AuthState>();
     final calls = context.read<CallState>();
-    loggedIn ? calls.start() : calls.stop();
+    if (loggedIn) {
+      calls.start();
+      PushService.start(auth.api);
+    } else {
+      calls.stop();
+      PushService.stop(auth.api);
+    }
   }
 
   @override

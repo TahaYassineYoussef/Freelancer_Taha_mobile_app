@@ -6,6 +6,7 @@ import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../services/api_service.dart';
+import '../services/push_service.dart';
 
 enum CallPhase { idle, incoming, outgoing, connected }
 
@@ -273,6 +274,7 @@ class CallState extends ChangeNotifier {
 
   void _markConnected() {
     if (phase == CallPhase.connected) return;
+    PushService.clearIncomingCall();
     phase = CallPhase.connected;
     _startedAt = DateTime.now();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -300,6 +302,7 @@ class CallState extends ChangeNotifier {
   }
 
   void _teardown({bool notify = true}) {
+    PushService.clearIncomingCall();
     _ticker?.cancel();
     _ticker = null;
     _pc?.close();

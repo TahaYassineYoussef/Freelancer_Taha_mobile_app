@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.freelancertaha"
+    namespace = "com.freelance.freelancetahaapp"
     // 36 is required by androidx.browser 1.9 (ephemeral Custom Tabs).
     compileSdk = 36
     // Pinned to the highest NDK any plugin needs (video_player, webview_flutter,
@@ -17,6 +17,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
+        // Required by flutter_local_notifications (scheduled call notifications).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -25,10 +27,11 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.freelancertaha"
+        applicationId = "com.freelance.freelancetahaapp"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        // firebase_messaging requires 23.
+        minSdk = 23
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -50,4 +53,11 @@ flutter {
 dependencies {
     // Custom Tabs, incl. setEphemeralBrowsingEnabled (private session) from 1.9.
     implementation("androidx.browser:browser:1.9.0")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+
+// Firebase is optional: without google-services.json the app still builds and
+// runs, just without call pushes. Drop the file in and rebuild to enable them.
+if (file("google-services.json").exists()) {
+    apply(plugin = "com.google.gms.google-services")
 }
