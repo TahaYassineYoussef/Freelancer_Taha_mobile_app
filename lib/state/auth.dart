@@ -12,11 +12,20 @@ class AuthState extends ChangeNotifier {
   bool get isLoggedIn => user != null;
 
   /// Called once at startup — restores a saved session if present.
+  ///
+  /// Never rethrows: if the token or the /me call fails (server down, no
+  /// network), we fall through to the login screen instead of leaving the app
+  /// stuck on its loading spinner.
   Future<void> bootstrap() async {
-    await api.loadToken();
-    user = await api.me();
-    loading = false;
-    notifyListeners();
+    try {
+      await api.loadToken();
+      user = await api.me();
+    } catch (_) {
+      user = null;
+    } finally {
+      loading = false;
+      notifyListeners();
+    }
   }
 
   Future<void> login(String email, String password) async {
@@ -26,6 +35,12 @@ class AuthState extends ChangeNotifier {
 
   Future<void> register(String name, String email, String password) async {
     user = await api.register(name, email, password);
+    notifyListeners();
+  }
+
+  /// Completes a Google sign-in that finished in the web view.
+  Future<void> signInWithToken(String token) async {
+    user = await api.adoptToken(token);
     notifyListeners();
   }
 

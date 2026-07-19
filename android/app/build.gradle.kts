@@ -7,8 +7,12 @@ plugins {
 
 android {
     namespace = "com.example.freelancertaha"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    // 36 is required by androidx.browser 1.9 (ephemeral Custom Tabs).
+    compileSdk = 36
+    // Pinned to the highest NDK any plugin needs (video_player, webview_flutter,
+    // url_launcher and shared_preferences all require 27); NDKs are backward
+    // compatible, so this satisfies every plugin.
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -41,4 +45,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // Custom Tabs, incl. setEphemeralBrowsingEnabled (private session) from 1.9.
+    implementation("androidx.browser:browser:1.9.0")
 }

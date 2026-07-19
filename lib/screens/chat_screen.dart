@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../state/auth.dart';
@@ -49,10 +50,32 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
               title: Text(p.name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
               subtitle: Text(p.role, style: const TextStyle(color: AppColors.textMuted)),
-              trailing: const Icon(Icons.chevron_right, color: AppColors.textMuted),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => ChatThreadScreen(partner: p)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (p.unread > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.gold,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('${p.unread}',
+                          style: const TextStyle(
+                              color: AppColors.ink, fontSize: 12, fontWeight: FontWeight.w800)),
+                    ),
+                  const Icon(Icons.chevron_right, color: AppColors.textMuted),
+                ],
               ),
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => ChatThreadScreen(partner: p)),
+                );
+                // Reading the thread clears its unread count server-side.
+                if (mounted) {
+                  setState(() => _future = context.read<AuthState>().api.chatPartners());
+                }
+              },
             );
           },
         );
@@ -167,7 +190,68 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
             bottomRight: Radius.circular(mine ? 4 : 16),
           ),
         ),
-        child: Text(m.body, style: TextStyle(color: mine ? AppColors.ink : Colors.white)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (m.hasAttachment) _attachment(m, mine),
+            if (m.body.isNotEmpty)
+              Text(m.body, style: TextStyle(color: mine ? AppColors.ink : Colors.white)),
+            if (mine)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Icon(m.read ? Icons.done_all : Icons.done,
+                    size: 14, color: AppColors.ink.withValues(alpha: 0.55)),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Image attachments preview inline; anything else opens externally.
+  Widget _attachment(Message m, bool mine) {
+    Future<void> onTap() async {
+      final uri = Uri.tryParse(m.attachmentUrl!);
+      if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+
+    if (m.isImage) {
+      return Padding(
+        padding: EdgeInsets.only(bottom: m.body.isEmpty ? 0 : 8),
+        child: GestureDetector(
+          onTap: onTap,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(m.attachmentUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _attachmentChip(m, mine, onTap)),
+          ),
+        ),
+      );
+    }
+    return Padding(
+      padding: EdgeInsets.only(bottom: m.body.isEmpty ? 0 : 8),
+      child: _attachmentChip(m, mine, onTap),
+    );
+  }
+
+  Widget _attachmentChip(Message m, bool mine, VoidCallback onTap) {
+    final color = mine ? AppColors.ink : Colors.white;
+    return InkWell(
+      onTap: onTap,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.attach_file, size: 16, color: color),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(m.attachmentName ?? 'Attachment',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                    color: color, decoration: TextDecoration.underline, fontSize: 13)),
+          ),
+        ],
       ),
     );
   }

@@ -5,7 +5,11 @@ import 'package:url_launcher/url_launcher.dart';
 import '../config.dart';
 import '../models.dart';
 import '../state/auth.dart';
+import '../state/i18n.dart';
 import '../theme.dart';
+import 'contact_screen.dart';
+import 'inline_video.dart';
+import 'review_sheet.dart';
 
 class PortfolioScreen extends StatefulWidget {
   const PortfolioScreen({super.key});
@@ -16,15 +20,31 @@ class PortfolioScreen extends StatefulWidget {
 
 class _PortfolioScreenState extends State<PortfolioScreen> {
   late Future<Freelancer?> _future;
+  String? _locale;
 
   @override
   void initState() {
     super.initState();
-    _future = context.read<AuthState>().api.portfolio();
+    _future = _fetch();
   }
 
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload the portfolio when the language changes: bio and headline come
+    // back translated from the server.
+    final locale = Provider.of<I18n>(context).locale;
+    if (locale != _locale) {
+      _locale = locale;
+      _future = _fetch();
+    }
+  }
+
+  Future<Freelancer?> _fetch() =>
+      context.read<AuthState>().api.portfolio(locale: _locale ?? 'en');
+
   Future<void> _refresh() async {
-    setState(() => _future = context.read<AuthState>().api.portfolio());
+    setState(() => _future = _fetch());
     await _future;
   }
 
@@ -53,6 +73,7 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                 Text(f.bio!, style: const TextStyle(color: Colors.white70, height: 1.5)),
               ],
               _contact(f),
+              _quickActions(f),
               if (f.skills.isNotEmpty) ...[
                 const SizedBox(height: 26),
                 const _SectionTitle('Skills'),
@@ -92,6 +113,11 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
                       body: e.description,
                     )),
               ],
+              if (f.testimonials.isNotEmpty) ...[
+                const SizedBox(height: 26),
+                const _SectionTitle('Reviews'),
+                ...f.testimonials.map((t) => _ReviewCard(t)),
+              ],
               if (f.diplomas.isNotEmpty) ...[
                 const SizedBox(height: 26),
                 const _SectionTitle('Education'),
@@ -129,6 +155,42 @@ class _PortfolioScreenState extends State<PortfolioScreen> {
     add(Icons.mail_outline, f.email);
     if (rows.isEmpty) return const SizedBox.shrink();
     return Padding(padding: const EdgeInsets.only(top: 12), child: Column(children: rows));
+  }
+
+  /// Download the CV, message Taha, or leave a review — the same three calls to
+  /// action the web site offers.
+  Widget _quickActions(Freelancer f) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 8,
+        children: [
+          if (f.cvUrl != null)
+            ElevatedButton.icon(
+              onPressed: () async {
+                final uri = Uri.tryParse(f.cvUrl!);
+                if (uri != null) await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+              label: Text(context.t('Download CV')),
+            ),
+          OutlinedButton.icon(
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ContactScreen()),
+            ),
+            icon: const Icon(Icons.mail_outline, size: 18),
+            label: Text(context.t('Contact')),
+          ),
+          if (context.read<AuthState>().isLoggedIn)
+            OutlinedButton.icon(
+              onPressed: () => ReviewSheet.show(context),
+              icon: const Icon(Icons.star_border, size: 18),
+              label: Text(context.t('Leave a review')),
+            ),
+        ],
+      ),
+    );
   }
 
   String _range(String? a, String? b, bool current) {
@@ -184,6 +246,45 @@ class _Hero extends StatelessWidget {
           Text(f.headline!, textAlign: TextAlign.center, style: const TextStyle(color: AppColors.gold)),
         ],
       ],
+    );
+  }
+}
+
+class _ReviewCard extends StatelessWidget {
+  final Testimonial t;
+  const _ReviewCard(this.t);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.ink700,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: List.generate(
+              5,
+              (i) => Icon(i < t.rating ? Icons.star : Icons.star_border,
+                  size: 16, color: AppColors.gold),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(t.body, style: const TextStyle(color: Colors.white70, height: 1.5)),
+          if (t.author != null) ...[
+            const SizedBox(height: 10),
+            Text(t.author!,
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+          ],
+          if (t.roleTitle != null && t.roleTitle!.isNotEmpty)
+            Text(t.roleTitle!, style: const TextStyle(color: AppColors.gold, fontSize: 12)),
+        ],
+      ),
     );
   }
 }
@@ -336,7 +437,13 @@ class _ProjectCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (p.thumbnailUrl != null)
+          // Everything plays in place: an uploaded mp4 streams directly, and a
+          // YouTube-only project uses the embed player.
+          if (p.videoUrl != null)
+            InlineVideo(url: p.videoUrl!, poster: p.thumbnailUrl, posterFallback: youtubeThumbnail(p.liveUrl))
+          else if (youtubeId(p.liveUrl) != null)
+            InlineYoutube(videoId: youtubeId(p.liveUrl)!, poster: p.imageUrl)
+          else if (p.thumbnailUrl != null)
             GestureDetector(
               onTap: p.watchUrl != null ? () => _open(p.watchUrl!) : null,
               child: Stack(

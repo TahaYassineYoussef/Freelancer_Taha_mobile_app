@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../services/api_service.dart';
 import '../state/auth.dart';
+import 'google_sign_in_button.dart';
 import 'register_screen.dart';
 
 /// Palette mirrored from the website's Login page (Tailwind violet/indigo/pink).
@@ -187,6 +188,10 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 24),
                         _submitButton(),
+                        const SizedBox(height: 18),
+                        const _OrDivider(),
+                        const SizedBox(height: 14),
+                        const GoogleSignInButton(),
                         const SizedBox(height: 20),
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -297,6 +302,26 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// "or" rule between the password form and the Google button.
+class _OrDivider extends StatelessWidget {
+  const _OrDivider();
+
+  @override
+  Widget build(BuildContext context) {
+    const line = Expanded(child: Divider(color: Color(0xFFE5E7EB), height: 1));
+    return const Row(
+      children: [
+        line,
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text('or', style: TextStyle(color: _LoginColors.gray500, fontSize: 12)),
+        ),
+        line,
+      ],
     );
   }
 }

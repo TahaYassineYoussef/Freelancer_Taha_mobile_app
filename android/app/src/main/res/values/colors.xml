@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Brand palette, mirroring lib/theme.dart (AppColors). -->
+    <color name="ink">#0B0B0D</color>
+    <color name="gold">#F9B233</color>
+</resources>

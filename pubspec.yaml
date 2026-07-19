@@ -40,6 +40,13 @@ dependencies:
   provider: ^6.1.2
   intl: ^0.19.0
   url_launcher: ^6.3.0
+  # PayPal checkout is rendered in an in-app browser so we can capture the
+  # captured order id and hand it to the API (mobile platforms only).
+  webview_flutter: ^4.10.0
+  # Plays a project's uploaded mp4 inline, inside its card.
+  video_player: ^2.9.2
+  app_links: ^6.4.1
+  webview_flutter_android: ^4.10.1
 
 dev_dependencies:
   flutter_test:

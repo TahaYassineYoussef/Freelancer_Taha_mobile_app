@@ -72,6 +72,13 @@ class ApiService {
     return AppUser.fromJson(data['user']);
   }
 
+  /// Adopts a token obtained out-of-band (the Google web-view flow) and
+  /// resolves the user it belongs to.
+  Future<AppUser?> adoptToken(String token) async {
+    await _saveToken(token);
+    return me();
+  }
+
   Future<AppUser?> me() async {
     if (_token == null) return null;
     try {
@@ -93,18 +100,27 @@ class ApiService {
 
   // ---- Portfolio ---------------------------------------------------------
 
-  Future<Freelancer?> portfolio() async {
-    final res = await http.get(_uri('/portfolio'), headers: _headers);
+  Future<Freelancer?> portfolio({String locale = 'en'}) async {
+    final res = await http.get(_uri('/portfolio?locale=$locale'), headers: _headers);
     final data = _decode(res);
     return data['freelancer'] == null ? null : Freelancer.fromJson(data['freelancer']);
   }
 
+  // ---- Localization ------------------------------------------------------
+
+  /// UI strings for [locale], already layered over English by the server.
+  Future<Map<String, String>> translations(String locale) async {
+    final res = await http.get(_uri('/translations/$locale'), headers: _headers);
+    final data = _decode(res);
+    return ((data['messages'] as Map?) ?? {})
+        .map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
+  }
+
   // ---- Tasks -------------------------------------------------------------
 
-  Future<List<Task>> tasks() async {
+  Future<TaskPage> tasks() async {
     final res = await http.get(_uri('/tasks'), headers: _headers);
-    final data = _decode(res);
-    return (data['tasks'] as List).map((e) => Task.fromJson(e)).toList();
+    return TaskPage.fromJson(_decode(res));
   }
 
   Future<Task> createTask({
@@ -125,6 +141,265 @@ class ApiService {
         }));
     final data = _decode(res);
     return Task.fromJson(data['task']);
+  }
+
+  /// Client approves a delivered task → completed.
+  Future<Task> approveTask(int taskId) async {
+    final res = await http.post(_uri('/tasks/$taskId/approve'), headers: _headers);
+    return Task.fromJson(_decode(res)['task']);
+  }
+
+  /// Client sends the delivery back for changes → in progress.
+  Future<Task> requestChanges(int taskId, String note) async {
+    final res = await http.post(_uri('/tasks/$taskId/request-changes'),
+        headers: _headers, body: jsonEncode({'note': note}));
+    return Task.fromJson(_decode(res)['task']);
+  }
+
+  Future<void> deleteTask(int taskId) async {
+    final res = await http.delete(_uri('/tasks/$taskId'), headers: _headers);
+    _decode(res);
+  }
+
+  // ---- Task actions (freelancer) -----------------------------------------
+
+  Future<Task> acceptTask(int taskId) async {
+    final res = await http.post(_uri('/tasks/$taskId/accept'), headers: _headers);
+    return Task.fromJson(_decode(res)['task']);
+  }
+
+  Future<Task> declineTask(int taskId) async {
+    final res = await http.post(_uri('/tasks/$taskId/decline'), headers: _headers);
+    return Task.fromJson(_decode(res)['task']);
+  }
+
+  Future<Task> deliverTask(int taskId, {String? note, String? link}) async {
+    final res = await http.post(_uri('/tasks/$taskId/deliver'),
+        headers: _headers,
+        body: jsonEncode({
+          if (note != null && note.isNotEmpty) 'deliverable_note': note,
+          if (link != null && link.isNotEmpty) 'deliverable_link': link,
+        }));
+    return Task.fromJson(_decode(res)['task']);
+  }
+
+  // ---- Payments ----------------------------------------------------------
+
+  Future<PaymentConfig> paymentConfig() async {
+    final res = await http.get(_uri('/payments/config'), headers: _headers);
+    return PaymentConfig.fromJson(_decode(res));
+  }
+
+  /// Records a captured PayPal order against the task.
+  Future<void> payWithPaypal(int taskId, String orderId) async {
+    final res = await http.post(_uri('/tasks/$taskId/pay'),
+        headers: _headers, body: jsonEncode({'provider_order_id': orderId}));
+    _decode(res);
+  }
+
+  /// Declares a D17 transfer (held pending until Taha confirms it).
+  Future<void> payWithD17(int taskId, String reference) async {
+    final res = await http.post(_uri('/tasks/$taskId/d17'),
+        headers: _headers, body: jsonEncode({'provider_order_id': reference}));
+    _decode(res);
+  }
+
+  // ---- Freelancer console ------------------------------------------------
+
+  Future<FreelancerDashboard> freelancerDashboard() async {
+    final res = await http.get(_uri('/freelancer/dashboard'), headers: _headers);
+    return FreelancerDashboard.fromJson(_decode(res));
+  }
+
+  Future<PaymentsPage> freelancerPayments() async {
+    final res = await http.get(_uri('/freelancer/payments'), headers: _headers);
+    return PaymentsPage.fromJson(_decode(res));
+  }
+
+  /// Confirm or reject a declared payment. [status] is `completed` or `failed`.
+  Future<String> reviewPayment(int paymentId, String status) async {
+    final res = await http.patch(_uri('/freelancer/payments/$paymentId'),
+        headers: _headers, body: jsonEncode({'status': status}));
+    return _decode(res)['message'] ?? 'Payment updated.';
+  }
+
+  Future<List<Revision>> revisions() async {
+    final res = await http.get(_uri('/freelancer/revisions'), headers: _headers);
+    final data = _decode(res);
+    return (data['revisions'] as List).map((e) => Revision.fromJson(e)).toList();
+  }
+
+  Future<List<ReviewRow>> freelancerReviews() async {
+    final res = await http.get(_uri('/freelancer/reviews'), headers: _headers);
+    final data = _decode(res);
+    return (data['reviews'] as List).map((e) => ReviewRow.fromJson(e)).toList();
+  }
+
+  /// Publish or hide a review.
+  Future<String> moderateReview(int reviewId, bool approved) async {
+    final res = await http.patch(_uri('/freelancer/reviews/$reviewId'),
+        headers: _headers, body: jsonEncode({'approved': approved}));
+    return _decode(res)['message'] ?? 'Review updated.';
+  }
+
+  // ---- Admin console -----------------------------------------------------
+
+  Future<VisitorStats> visitors() async {
+    final res = await http.get(_uri('/admin/visitors'), headers: _headers);
+    return VisitorStats.fromJson(_decode(res));
+  }
+
+  Future<BookingsPage> bookings() async {
+    final res = await http.get(_uri('/admin/bookings'), headers: _headers);
+    return BookingsPage.fromJson(_decode(res));
+  }
+
+  /// [status] is `confirmed` or `declined`.
+  Future<String> reviewBooking(int bookingId, String status) async {
+    final res = await http.patch(_uri('/admin/bookings/$bookingId'),
+        headers: _headers, body: jsonEncode({'status': status}));
+    return _decode(res)['message'] ?? 'Booking updated.';
+  }
+
+  Future<List<DaySchedule>> availability() async {
+    final res = await http.get(_uri('/admin/availability'), headers: _headers);
+    final data = _decode(res);
+    return (data['schedule'] as List).map((e) => DaySchedule.fromJson(e)).toList();
+  }
+
+  Future<List<DaySchedule>> saveAvailability(DaySchedule day) async {
+    final res = await http.patch(_uri('/admin/availability'),
+        headers: _headers,
+        body: jsonEncode({
+          'day': day.day,
+          'is_open': day.isOpen,
+          'start_time': day.startTime,
+          'end_time': day.endTime,
+        }));
+    final data = _decode(res);
+    return (data['schedule'] as List).map((e) => DaySchedule.fromJson(e)).toList();
+  }
+
+  Future<List<InboxMessage>> inbox() async {
+    final res = await http.get(_uri('/admin/inbox'), headers: _headers);
+    final data = _decode(res);
+    return (data['messages'] as List).map((e) => InboxMessage.fromJson(e)).toList();
+  }
+
+  Future<void> markMessageRead(int id) async {
+    final res = await http.patch(_uri('/admin/inbox/$id/read'), headers: _headers);
+    _decode(res);
+  }
+
+  Future<void> deleteMessage(int id) async {
+    final res = await http.delete(_uri('/admin/inbox/$id'), headers: _headers);
+    _decode(res);
+  }
+
+  Future<BlockedPage> blocked() async {
+    final res = await http.get(_uri('/admin/blocked'), headers: _headers);
+    return BlockedPage.fromJson(_decode(res));
+  }
+
+  Future<void> deleteBlocked(int id) async {
+    final res = await http.delete(_uri('/admin/blocked/$id'), headers: _headers);
+    _decode(res);
+  }
+
+  Future<CvOverview> cv() async {
+    final res = await http.get(_uri('/admin/cv'), headers: _headers);
+    return CvOverview.fromJson(_decode(res));
+  }
+
+  Future<String> updateCvProfile(Map<String, String> fields) async {
+    final res = await http.patch(_uri('/admin/cv/profile'),
+        headers: _headers, body: jsonEncode(fields));
+    return _decode(res)['message'] ?? 'Profile updated.';
+  }
+
+  // ---- Deliveries --------------------------------------------------------
+
+  Future<List<Delivery>> deliveries() async {
+    final res = await http.get(_uri('/deliveries'), headers: _headers);
+    final data = _decode(res);
+    return (data['deliveries'] as List).map((e) => Delivery.fromJson(e)).toList();
+  }
+
+  // ---- Reviews -----------------------------------------------------------
+
+  Future<String> submitReview({
+    required int rating,
+    required String body,
+    String? roleTitle,
+    int? taskId,
+  }) async {
+    final res = await http.post(_uri('/testimonials'),
+        headers: _headers,
+        body: jsonEncode({
+          'rating': rating,
+          'body': body,
+          if (roleTitle != null && roleTitle.isNotEmpty) 'role_title': roleTitle,
+          if (taskId != null) 'task_id': taskId,
+        }));
+    return _decode(res)['message'] ?? 'Thanks for your review!';
+  }
+
+  // ---- Contact -----------------------------------------------------------
+
+  Future<String> sendContact({
+    required String name,
+    required String email,
+    String? subject,
+    required String body,
+  }) async {
+    final res = await http.post(_uri('/contact'),
+        headers: _headers,
+        body: jsonEncode({
+          'name': name,
+          'email': email,
+          if (subject != null && subject.isNotEmpty) 'subject': subject,
+          'body': body,
+        }));
+    return _decode(res)['message'] ?? 'Message sent.';
+  }
+
+  // ---- Notifications -----------------------------------------------------
+
+  Future<NotificationFeed> notifications() async {
+    final res = await http.get(_uri('/notifications'), headers: _headers);
+    return NotificationFeed.fromJson(_decode(res));
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    final res = await http.post(_uri('/notifications/read'), headers: _headers);
+    _decode(res);
+  }
+
+  Future<void> markNotificationRead(String id) async {
+    final res = await http.post(_uri('/notifications/$id/read'), headers: _headers);
+    _decode(res);
+  }
+
+  // ---- Profile -----------------------------------------------------------
+
+  Future<AppUser> updateProfile({required String name, required String email}) async {
+    final res = await http.patch(_uri('/profile'),
+        headers: _headers, body: jsonEncode({'name': name, 'email': email}));
+    return AppUser.fromJson(_decode(res)['user']);
+  }
+
+  Future<String> updatePassword({
+    required String currentPassword,
+    required String password,
+  }) async {
+    final res = await http.put(_uri('/profile/password'),
+        headers: _headers,
+        body: jsonEncode({
+          'current_password': currentPassword,
+          'password': password,
+          'password_confirmation': password,
+        }));
+    return _decode(res)['message'] ?? 'Password updated.';
   }
 
   // ---- Chat --------------------------------------------------------------
