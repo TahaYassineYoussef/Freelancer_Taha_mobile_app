@@ -341,6 +341,48 @@ class ApiService {
     return _decode(res)['message'] ?? 'Profile updated.';
   }
 
+  // ---- Calls -------------------------------------------------------------
+
+  /// Drains every call signal addressed to me. Signals are consumed once.
+  Future<List<Map<String, dynamic>>> pollCalls() async {
+    final res = await http.get(_uri('/calls/poll'), headers: _headers);
+    final data = _decode(res);
+    return (data['signals'] as List? ?? []).cast<Map<String, dynamic>>();
+  }
+
+  Future<void> sendCallSignal({
+    required int toId,
+    required String kind,
+    String? payload,
+  }) async {
+    final res = await http.post(_uri('/calls/signal'),
+        headers: _headers,
+        body: jsonEncode({
+          'to_id': toId,
+          'kind': kind,
+          if (payload != null) 'payload': payload,
+        }));
+    _decode(res);
+  }
+
+  /// Drops the call-log card into the conversation.
+  Future<void> logCall({
+    required int toId,
+    required String kind,
+    required String status,
+    int? seconds,
+  }) async {
+    final res = await http.post(_uri('/calls/log'),
+        headers: _headers,
+        body: jsonEncode({
+          'to_id': toId,
+          'kind': kind,
+          'status': status,
+          if (seconds != null) 'seconds': seconds,
+        }));
+    _decode(res);
+  }
+
   // ---- Deliveries --------------------------------------------------------
 
   Future<List<Delivery>> deliveries() async {

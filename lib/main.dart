@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import 'screens/call_overlay.dart';
 import 'screens/home_shell.dart';
 import 'screens/login_screen.dart';
 import 'state/auth.dart';
+import 'state/call_state.dart';
 import 'state/i18n.dart';
 import 'theme.dart';
 
@@ -20,6 +22,7 @@ void main() {
         ChangeNotifierProvider.value(value: auth),
         // Shares the auth service so translations ride the same client.
         ChangeNotifierProvider(create: (_) => I18n(auth.api)..bootstrap()),
+        ChangeNotifierProvider(create: (_) => CallState(auth.api)),
       ],
       child: const TahaApp(),
     ),
@@ -42,7 +45,8 @@ class TahaApp extends StatelessWidget {
         notifier: i18n,
         child: Directionality(
           textDirection: i18n.direction,
-          child: child ?? const SizedBox.shrink(),
+          // Above the navigator, so a call takes over from any screen.
+          child: CallHost(child: child ?? const SizedBox.shrink()),
         ),
       ),
       home: const _AuthGate(),
@@ -50,8 +54,23 @@ class TahaApp extends StatelessWidget {
   }
 }
 
-class _AuthGate extends StatelessWidget {
+class _AuthGate extends StatefulWidget {
   const _AuthGate();
+
+  @override
+  State<_AuthGate> createState() => _AuthGateState();
+}
+
+class _AuthGateState extends State<_AuthGate> {
+  bool _listening = false;
+
+  /// Only ring while someone is signed in.
+  void _syncCallListener(bool loggedIn) {
+    if (loggedIn == _listening) return;
+    _listening = loggedIn;
+    final calls = context.read<CallState>();
+    loggedIn ? calls.start() : calls.stop();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +81,8 @@ class _AuthGate extends StatelessWidget {
         body: Center(child: CircularProgressIndicator(color: AppColors.gold)),
       );
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncCallListener(auth.isLoggedIn));
 
     return auth.isLoggedIn ? const HomeShell() : const LoginScreen();
   }
