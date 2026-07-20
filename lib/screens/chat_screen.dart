@@ -192,8 +192,49 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
     );
   }
 
+  /// A Messenger-style call-log row: icon + "Video call · 2:14" or "Missed call".
+  Widget _callCard(Message m, bool mine) {
+    final video = m.callKind == 'video';
+    final missed = m.callStatus == 'missed' || m.callStatus == 'declined';
+    final label = missed
+        ? (mine ? 'Cancelled call' : 'Missed call')
+        : (video ? 'Video call' : 'Voice call');
+    final secs = m.callSeconds ?? 0;
+    final duration = (!missed && secs > 0)
+        ? ' · ${(secs ~/ 60)}:${(secs % 60).toString().padLeft(2, '0')}'
+        : '';
+    final color = missed ? const Color(0xFFF87171) : AppColors.gold;
+
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.ink600,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              video ? Icons.videocam : Icons.call,
+              size: 18,
+              color: color,
+            ),
+            const SizedBox(width: 8),
+            Text('$label$duration',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 13)),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _bubble(Message m) {
     final mine = m.senderId == _meId;
+    if (m.isCall) return _callCard(m, mine);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(

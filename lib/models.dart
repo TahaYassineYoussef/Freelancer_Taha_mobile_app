@@ -429,6 +429,10 @@ class Message {
   final String? attachmentUrl;
   final String? attachmentName;
   final String? attachmentMime;
+  // Call-log entries carry no text; these describe the call instead.
+  final String? callKind; // 'video' | 'voice'
+  final String? callStatus; // 'completed' | 'missed' | 'declined'
+  final int? callSeconds;
 
   Message({
     required this.id,
@@ -440,10 +444,14 @@ class Message {
     this.attachmentUrl,
     this.attachmentName,
     this.attachmentMime,
+    this.callKind,
+    this.callStatus,
+    this.callSeconds,
   });
 
   bool get hasAttachment => attachmentUrl != null;
   bool get isImage => attachmentMime?.startsWith('image/') ?? false;
+  bool get isCall => callKind != null;
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
         id: j['id'],
@@ -455,6 +463,9 @@ class Message {
         attachmentUrl: mediaUrl(j['attachment_url']),
         attachmentName: j['attachment_name'],
         attachmentMime: j['attachment_mime'],
+        callKind: j['call_kind'],
+        callStatus: j['call_status'],
+        callSeconds: _asInt(j['call_seconds']),
       );
 }
 
