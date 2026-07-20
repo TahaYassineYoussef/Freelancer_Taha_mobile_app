@@ -41,6 +41,7 @@ class PushService {
   static Future<void> start(ApiService api) async {
     if (kIsWeb) return;
 
+    debugPrint('PUSH: start()');
     try {
       await Firebase.initializeApp();
 
@@ -63,8 +64,13 @@ class PushService {
         if (m.data['type'] == 'call') showIncomingCall(m.data);
       });
 
+      debugPrint('PUSH: requesting FCM token…');
       _token = await FirebaseMessaging.instance.getToken();
-      if (_token != null) await api.registerDevice(_token!);
+      debugPrint('PUSH: token = ${_token == null ? "NULL" : "${_token!.substring(0, 20)}…"}');
+      if (_token != null) {
+        await api.registerDevice(_token!);
+        debugPrint('PUSH: registered with the server');
+      }
 
       // Tokens rotate; keep the server in step.
       FirebaseMessaging.instance.onTokenRefresh.listen((t) async {
