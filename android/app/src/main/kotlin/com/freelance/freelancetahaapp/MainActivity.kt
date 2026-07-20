@@ -1,22 +1,47 @@
 package com.freelance.freelancetahaapp
 
 import android.net.Uri
+import android.os.Build
+import android.os.Bundle
+import android.view.WindowManager
 import androidx.browser.customtabs.CustomTabsIntent
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 /**
- * Hosts a channel that opens a URL in an *ephemeral* Custom Tab — a private
- * browsing session whose cookies and history are discarded when it closes.
+ * Hosts two things:
+ *  - a channel to open URLs in a private Custom Tab (legacy Google web flow), and
+ *  - the flags that let a full-screen-intent call notification appear over the
+ *    lock screen and wake the display, like WhatsApp / Messenger.
  *
- * Google rejects OAuth inside embedded WebViews ("disallowed_useragent"), so
- * sign-in has to happen in a real browser; ephemeral mode keeps it from
- * inheriting, or leaving behind, a Chrome session.
+ * The lock-screen flags are harmless when the phone is already unlocked (opening
+ * the app normally looks no different); they only take effect when the incoming
+ * call's full-screen intent launches this activity while the screen is off or
+ * locked.
  */
 class MainActivity : FlutterActivity() {
 
     private val channelName = "taha/customtabs"
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        showOverLockScreen()
+        super.onCreate(savedInstanceState)
+    }
+
+    private fun showOverLockScreen() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            setShowWhenLocked(true)
+            setTurnScreenOn(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+            )
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)

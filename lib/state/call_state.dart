@@ -57,6 +57,25 @@ class CallState extends ChangeNotifier {
   /// Begin listening for calls. Safe to call more than once.
   void start() {
     _poll ??= Timer.periodic(const Duration(seconds: 3), (_) => _drain());
+    // A push may have woken us straight into a call — ring immediately.
+    _consumePendingCall();
+  }
+
+  /// Rings from a call the FCM push already delivered, so the screen lights up
+  /// the moment the app wakes instead of after the next poll. The matching
+  /// offer (with its SDP) still arrives via the poll and fills [_pendingOffer].
+  Future<void> _consumePendingCall() async {
+    final data = await PushService.takePendingCall();
+    if (data == null || inCall) return;
+
+    peerId = int.tryParse('${data['from_id']}');
+    peerName = data['from_name']?.toString() ?? 'Someone';
+    isVideo = data['video'] == '1' || data['video'] == true;
+    phase = CallPhase.incoming;
+    notifyListeners();
+
+    // Fetch the real offer now rather than waiting up to 3s for the timer.
+    _drain();
   }
 
   void stop() {
@@ -140,6 +159,46 @@ class CallState extends ChangeNotifier {
   }
 
   // ---- Actions -----------------------------------------------------------
+
+  /// Place a call to [userId]. Mirrors the web client: open the media, create
+  /// an offer, and send it — the callee answers with their SDP.
+  Future<void> callUser(int userId, String name, {required bool video}) async {
+    if (inCall) return;
+
+    peerId = userId;
+    peerName = name;
+    isVideo = video;
+    phase = CallPhase.outgoing;
+    error = null;
+    notifyListeners();
+
+    if (!await _grantPermissions(video: video)) {
+      error = 'Microphone permission is required to place calls.';
+      _teardown();
+      return;
+    }
+
+    try {
+      await _ensureRenderers();
+      await _openPeer(video: video);
+
+      final offer = await _pc!.createOffer();
+      await _pc!.setLocalDescription(offer);
+
+      await api.sendCallSignal(
+        toId: userId,
+        kind: 'offer',
+        payload: jsonEncode({
+          'sdp': {'type': offer.type, 'sdp': offer.sdp},
+          'video': video,
+        }),
+      );
+      // Now we wait for the 'answer' signal, handled by the poll.
+    } catch (_) {
+      error = 'Could not start the call.';
+      await hangUp();
+    }
+  }
 
   /// Answer the call we are being rung with.
   Future<void> accept() async {

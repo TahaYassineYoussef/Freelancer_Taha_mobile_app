@@ -7,9 +7,18 @@ import 'package:flutter/foundation.dart';
 /// - Android emulator reaches the host machine via 10.0.2.2
 /// - Web / desktop use 127.0.0.1
 /// - On a real phone, replace with your PC's LAN IP, e.g. http://192.168.1.15:8000/api
+/// Host the app talks to on Android.
+///
+/// A real phone reaches the dev machine over Wi-Fi at its LAN IP, provided the
+/// server runs with `--host=0.0.0.0` and TCP 8000 is allowed through the
+/// firewall. (`adb reverse` did not route on the test A50, so the tunnel isn't
+/// relied on.) The emulator reaches this LAN IP fine too. In production this is
+/// simply your domain.
+const _androidHost = '192.168.0.230';
+
 String get apiBaseUrl {
   if (kIsWeb) return 'http://127.0.0.1:8000/api';
-  if (Platform.isAndroid) return 'http://10.0.2.2:8000/api';
+  if (Platform.isAndroid) return 'http://$_androidHost:8000/api';
   return 'http://127.0.0.1:8000/api';
 }
 
@@ -21,18 +30,14 @@ String get apiOrigin {
 
 /// Origin used for the Google OAuth round-trip.
 ///
-/// Google only accepts public hostnames or loopback as a redirect URI — never
-/// `10.0.2.2` — and the OAuth session cookie has to live on the same host for
-/// the whole trip, so the flow starts on loopback too. On the Android emulator
-/// that requires the port to be forwarded to the machine running Laravel:
+/// The whole trip must stay on one host so the OAuth session cookie survives,
+/// so this simply follows [apiOrigin].
 ///
-///     adb reverse tcp:8000 tcp:8000
-///
-/// Point this at your real domain in production.
-String get oauthOrigin {
-  final origin = Uri.parse(apiOrigin);
-  return origin.replace(host: '127.0.0.1').toString();
-}
+/// Note for real devices: Google only accepts a public hostname or loopback as
+/// a redirect URI — never a LAN IP — so sign-in needs a public URL (an ngrok
+/// tunnel in development, your domain in production) registered in the Google
+/// console. Email/password login has no such constraint.
+String get oauthOrigin => apiOrigin;
 
 /// The 11-character video id in a YouTube watch/share/short/embed link, or null.
 String? youtubeId(String? url) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
@@ -41,6 +42,8 @@ class ApiService {
 
   Uri _uri(String path) => Uri.parse('$apiBaseUrl$path');
 
+  static const _timeout = Duration(seconds: 12);
+
   dynamic _decode(http.Response res) {
     final body = res.body.isEmpty ? {} : jsonDecode(res.body);
     if (res.statusCode >= 200 && res.statusCode < 300) return body;
@@ -57,7 +60,7 @@ class ApiService {
 
   Future<AppUser> login(String email, String password) async {
     final res = await http.post(_uri('/login'),
-        headers: _headers, body: jsonEncode({'email': email, 'password': password}));
+        headers: _headers, body: jsonEncode({'email': email, 'password': password})).timeout(_timeout);
     final data = _decode(res);
     await _saveToken(data['token']);
     return AppUser.fromJson(data['user']);
@@ -66,14 +69,23 @@ class ApiService {
   Future<AppUser> register(String name, String email, String password) async {
     final res = await http.post(_uri('/register'),
         headers: _headers,
-        body: jsonEncode({'name': name, 'email': email, 'password': password}));
+        body: jsonEncode({'name': name, 'email': email, 'password': password})).timeout(_timeout);
     final data = _decode(res);
     await _saveToken(data['token']);
     return AppUser.fromJson(data['user']);
   }
 
-  /// Adopts a token obtained out-of-band (the Google web-view flow) and
-  /// resolves the user it belongs to.
+  /// Trades a Google ID token for our own API token. The server verifies the
+  /// ID token with Google before trusting it.
+  Future<AppUser> loginWithGoogle(String idToken) async {
+    final res = await http.post(_uri('/auth/google'),
+        headers: _headers, body: jsonEncode({'id_token': idToken})).timeout(_timeout);
+    final data = _decode(res);
+    await _saveToken(data['token']);
+    return AppUser.fromJson(data['user']);
+  }
+
+  /// Adopts a token obtained out-of-band and resolves the user it belongs to.
   Future<AppUser?> adoptToken(String token) async {
     await _saveToken(token);
     return me();
@@ -82,7 +94,7 @@ class ApiService {
   Future<AppUser?> me() async {
     if (_token == null) return null;
     try {
-      final res = await http.get(_uri('/me'), headers: _headers);
+      final res = await http.get(_uri('/me'), headers: _headers).timeout(_timeout);
       final data = _decode(res);
       return AppUser.fromJson(data['user']);
     } on ApiException {
@@ -93,7 +105,7 @@ class ApiService {
 
   Future<void> logout() async {
     try {
-      await http.post(_uri('/logout'), headers: _headers);
+      await http.post(_uri('/logout'), headers: _headers).timeout(_timeout);
     } catch (_) {}
     await _saveToken(null);
   }
@@ -101,7 +113,7 @@ class ApiService {
   // ---- Portfolio ---------------------------------------------------------
 
   Future<Freelancer?> portfolio({String locale = 'en'}) async {
-    final res = await http.get(_uri('/portfolio?locale=$locale'), headers: _headers);
+    final res = await http.get(_uri('/portfolio?locale=$locale'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return data['freelancer'] == null ? null : Freelancer.fromJson(data['freelancer']);
   }
@@ -110,7 +122,7 @@ class ApiService {
 
   /// UI strings for [locale], already layered over English by the server.
   Future<Map<String, String>> translations(String locale) async {
-    final res = await http.get(_uri('/translations/$locale'), headers: _headers);
+    final res = await http.get(_uri('/translations/$locale'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return ((data['messages'] as Map?) ?? {})
         .map((k, v) => MapEntry(k.toString(), v?.toString() ?? ''));
@@ -119,7 +131,7 @@ class ApiService {
   // ---- Tasks -------------------------------------------------------------
 
   Future<TaskPage> tasks() async {
-    final res = await http.get(_uri('/tasks'), headers: _headers);
+    final res = await http.get(_uri('/tasks'), headers: _headers).timeout(_timeout);
     return TaskPage.fromJson(_decode(res));
   }
 
@@ -138,38 +150,38 @@ class ApiService {
           if (category != null && category.isNotEmpty) 'category': category,
           if (budget != null && budget.isNotEmpty) 'budget': budget,
           if (deadline != null && deadline.isNotEmpty) 'deadline': deadline,
-        }));
+        })).timeout(_timeout);
     final data = _decode(res);
     return Task.fromJson(data['task']);
   }
 
   /// Client approves a delivered task → completed.
   Future<Task> approveTask(int taskId) async {
-    final res = await http.post(_uri('/tasks/$taskId/approve'), headers: _headers);
+    final res = await http.post(_uri('/tasks/$taskId/approve'), headers: _headers).timeout(_timeout);
     return Task.fromJson(_decode(res)['task']);
   }
 
   /// Client sends the delivery back for changes → in progress.
   Future<Task> requestChanges(int taskId, String note) async {
     final res = await http.post(_uri('/tasks/$taskId/request-changes'),
-        headers: _headers, body: jsonEncode({'note': note}));
+        headers: _headers, body: jsonEncode({'note': note})).timeout(_timeout);
     return Task.fromJson(_decode(res)['task']);
   }
 
   Future<void> deleteTask(int taskId) async {
-    final res = await http.delete(_uri('/tasks/$taskId'), headers: _headers);
+    final res = await http.delete(_uri('/tasks/$taskId'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
   // ---- Task actions (freelancer) -----------------------------------------
 
   Future<Task> acceptTask(int taskId) async {
-    final res = await http.post(_uri('/tasks/$taskId/accept'), headers: _headers);
+    final res = await http.post(_uri('/tasks/$taskId/accept'), headers: _headers).timeout(_timeout);
     return Task.fromJson(_decode(res)['task']);
   }
 
   Future<Task> declineTask(int taskId) async {
-    final res = await http.post(_uri('/tasks/$taskId/decline'), headers: _headers);
+    final res = await http.post(_uri('/tasks/$taskId/decline'), headers: _headers).timeout(_timeout);
     return Task.fromJson(_decode(res)['task']);
   }
 
@@ -179,58 +191,58 @@ class ApiService {
         body: jsonEncode({
           if (note != null && note.isNotEmpty) 'deliverable_note': note,
           if (link != null && link.isNotEmpty) 'deliverable_link': link,
-        }));
+        })).timeout(_timeout);
     return Task.fromJson(_decode(res)['task']);
   }
 
   // ---- Payments ----------------------------------------------------------
 
   Future<PaymentConfig> paymentConfig() async {
-    final res = await http.get(_uri('/payments/config'), headers: _headers);
+    final res = await http.get(_uri('/payments/config'), headers: _headers).timeout(_timeout);
     return PaymentConfig.fromJson(_decode(res));
   }
 
   /// Records a captured PayPal order against the task.
   Future<void> payWithPaypal(int taskId, String orderId) async {
     final res = await http.post(_uri('/tasks/$taskId/pay'),
-        headers: _headers, body: jsonEncode({'provider_order_id': orderId}));
+        headers: _headers, body: jsonEncode({'provider_order_id': orderId})).timeout(_timeout);
     _decode(res);
   }
 
   /// Declares a D17 transfer (held pending until Taha confirms it).
   Future<void> payWithD17(int taskId, String reference) async {
     final res = await http.post(_uri('/tasks/$taskId/d17'),
-        headers: _headers, body: jsonEncode({'provider_order_id': reference}));
+        headers: _headers, body: jsonEncode({'provider_order_id': reference})).timeout(_timeout);
     _decode(res);
   }
 
   // ---- Freelancer console ------------------------------------------------
 
   Future<FreelancerDashboard> freelancerDashboard() async {
-    final res = await http.get(_uri('/freelancer/dashboard'), headers: _headers);
+    final res = await http.get(_uri('/freelancer/dashboard'), headers: _headers).timeout(_timeout);
     return FreelancerDashboard.fromJson(_decode(res));
   }
 
   Future<PaymentsPage> freelancerPayments() async {
-    final res = await http.get(_uri('/freelancer/payments'), headers: _headers);
+    final res = await http.get(_uri('/freelancer/payments'), headers: _headers).timeout(_timeout);
     return PaymentsPage.fromJson(_decode(res));
   }
 
   /// Confirm or reject a declared payment. [status] is `completed` or `failed`.
   Future<String> reviewPayment(int paymentId, String status) async {
     final res = await http.patch(_uri('/freelancer/payments/$paymentId'),
-        headers: _headers, body: jsonEncode({'status': status}));
+        headers: _headers, body: jsonEncode({'status': status})).timeout(_timeout);
     return _decode(res)['message'] ?? 'Payment updated.';
   }
 
   Future<List<Revision>> revisions() async {
-    final res = await http.get(_uri('/freelancer/revisions'), headers: _headers);
+    final res = await http.get(_uri('/freelancer/revisions'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['revisions'] as List).map((e) => Revision.fromJson(e)).toList();
   }
 
   Future<List<ReviewRow>> freelancerReviews() async {
-    final res = await http.get(_uri('/freelancer/reviews'), headers: _headers);
+    final res = await http.get(_uri('/freelancer/reviews'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['reviews'] as List).map((e) => ReviewRow.fromJson(e)).toList();
   }
@@ -238,31 +250,31 @@ class ApiService {
   /// Publish or hide a review.
   Future<String> moderateReview(int reviewId, bool approved) async {
     final res = await http.patch(_uri('/freelancer/reviews/$reviewId'),
-        headers: _headers, body: jsonEncode({'approved': approved}));
+        headers: _headers, body: jsonEncode({'approved': approved})).timeout(_timeout);
     return _decode(res)['message'] ?? 'Review updated.';
   }
 
   // ---- Admin console -----------------------------------------------------
 
   Future<VisitorStats> visitors() async {
-    final res = await http.get(_uri('/admin/visitors'), headers: _headers);
+    final res = await http.get(_uri('/admin/visitors'), headers: _headers).timeout(_timeout);
     return VisitorStats.fromJson(_decode(res));
   }
 
   Future<BookingsPage> bookings() async {
-    final res = await http.get(_uri('/admin/bookings'), headers: _headers);
+    final res = await http.get(_uri('/admin/bookings'), headers: _headers).timeout(_timeout);
     return BookingsPage.fromJson(_decode(res));
   }
 
   /// [status] is `confirmed` or `declined`.
   Future<String> reviewBooking(int bookingId, String status) async {
     final res = await http.patch(_uri('/admin/bookings/$bookingId'),
-        headers: _headers, body: jsonEncode({'status': status}));
+        headers: _headers, body: jsonEncode({'status': status})).timeout(_timeout);
     return _decode(res)['message'] ?? 'Booking updated.';
   }
 
   Future<List<DaySchedule>> availability() async {
-    final res = await http.get(_uri('/admin/availability'), headers: _headers);
+    final res = await http.get(_uri('/admin/availability'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['schedule'] as List).map((e) => DaySchedule.fromJson(e)).toList();
   }
@@ -275,39 +287,39 @@ class ApiService {
           'is_open': day.isOpen,
           'start_time': day.startTime,
           'end_time': day.endTime,
-        }));
+        })).timeout(_timeout);
     final data = _decode(res);
     return (data['schedule'] as List).map((e) => DaySchedule.fromJson(e)).toList();
   }
 
   Future<List<InboxMessage>> inbox() async {
-    final res = await http.get(_uri('/admin/inbox'), headers: _headers);
+    final res = await http.get(_uri('/admin/inbox'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['messages'] as List).map((e) => InboxMessage.fromJson(e)).toList();
   }
 
   Future<void> markMessageRead(int id) async {
-    final res = await http.patch(_uri('/admin/inbox/$id/read'), headers: _headers);
+    final res = await http.patch(_uri('/admin/inbox/$id/read'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
   Future<void> deleteMessage(int id) async {
-    final res = await http.delete(_uri('/admin/inbox/$id'), headers: _headers);
+    final res = await http.delete(_uri('/admin/inbox/$id'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
   Future<BlockedPage> blocked() async {
-    final res = await http.get(_uri('/admin/blocked'), headers: _headers);
+    final res = await http.get(_uri('/admin/blocked'), headers: _headers).timeout(_timeout);
     return BlockedPage.fromJson(_decode(res));
   }
 
   Future<void> deleteBlocked(int id) async {
-    final res = await http.delete(_uri('/admin/blocked/$id'), headers: _headers);
+    final res = await http.delete(_uri('/admin/blocked/$id'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
   Future<PaymentSettings> paymentSettings() async {
-    final res = await http.get(_uri('/admin/payment-settings'), headers: _headers);
+    final res = await http.get(_uri('/admin/payment-settings'), headers: _headers).timeout(_timeout);
     return PaymentSettings.fromJson(_decode(res));
   }
 
@@ -326,18 +338,18 @@ class ApiService {
           'paypal_enabled': paypalEnabled,
           'd17_number': d17Number.isEmpty ? null : d17Number,
           'd17_enabled': d17Enabled,
-        }));
+        })).timeout(_timeout);
     return _decode(res)['message'] ?? 'Payment settings saved.';
   }
 
   Future<CvOverview> cv() async {
-    final res = await http.get(_uri('/admin/cv'), headers: _headers);
+    final res = await http.get(_uri('/admin/cv'), headers: _headers).timeout(_timeout);
     return CvOverview.fromJson(_decode(res));
   }
 
   Future<String> updateCvProfile(Map<String, String> fields) async {
     final res = await http.patch(_uri('/admin/cv/profile'),
-        headers: _headers, body: jsonEncode(fields));
+        headers: _headers, body: jsonEncode(fields)).timeout(_timeout);
     return _decode(res)['message'] ?? 'Profile updated.';
   }
 
@@ -345,7 +357,7 @@ class ApiService {
 
   /// Drains every call signal addressed to me. Signals are consumed once.
   Future<List<Map<String, dynamic>>> pollCalls() async {
-    final res = await http.get(_uri('/calls/poll'), headers: _headers);
+    final res = await http.get(_uri('/calls/poll'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['signals'] as List? ?? []).cast<Map<String, dynamic>>();
   }
@@ -361,7 +373,7 @@ class ApiService {
           'to_id': toId,
           'kind': kind,
           if (payload != null) 'payload': payload,
-        }));
+        })).timeout(_timeout);
     _decode(res);
   }
 
@@ -379,27 +391,27 @@ class ApiService {
           'kind': kind,
           'status': status,
           if (seconds != null) 'seconds': seconds,
-        }));
+        })).timeout(_timeout);
     _decode(res);
   }
 
   /// Registers this device for call pushes.
   Future<void> registerDevice(String token) async {
     final res = await http.post(_uri('/devices'),
-        headers: _headers, body: jsonEncode({'token': token, 'platform': 'android'}));
+        headers: _headers, body: jsonEncode({'token': token, 'platform': 'android'})).timeout(_timeout);
     _decode(res);
   }
 
   Future<void> forgetDevice(String token) async {
     final res = await http.delete(_uri('/devices'),
-        headers: _headers, body: jsonEncode({'token': token}));
+        headers: _headers, body: jsonEncode({'token': token})).timeout(_timeout);
     _decode(res);
   }
 
   // ---- Deliveries --------------------------------------------------------
 
   Future<List<Delivery>> deliveries() async {
-    final res = await http.get(_uri('/deliveries'), headers: _headers);
+    final res = await http.get(_uri('/deliveries'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['deliveries'] as List).map((e) => Delivery.fromJson(e)).toList();
   }
@@ -419,7 +431,7 @@ class ApiService {
           'body': body,
           if (roleTitle != null && roleTitle.isNotEmpty) 'role_title': roleTitle,
           if (taskId != null) 'task_id': taskId,
-        }));
+        })).timeout(_timeout);
     return _decode(res)['message'] ?? 'Thanks for your review!';
   }
 
@@ -438,24 +450,24 @@ class ApiService {
           'email': email,
           if (subject != null && subject.isNotEmpty) 'subject': subject,
           'body': body,
-        }));
+        })).timeout(_timeout);
     return _decode(res)['message'] ?? 'Message sent.';
   }
 
   // ---- Notifications -----------------------------------------------------
 
   Future<NotificationFeed> notifications() async {
-    final res = await http.get(_uri('/notifications'), headers: _headers);
+    final res = await http.get(_uri('/notifications'), headers: _headers).timeout(_timeout);
     return NotificationFeed.fromJson(_decode(res));
   }
 
   Future<void> markAllNotificationsRead() async {
-    final res = await http.post(_uri('/notifications/read'), headers: _headers);
+    final res = await http.post(_uri('/notifications/read'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
   Future<void> markNotificationRead(String id) async {
-    final res = await http.post(_uri('/notifications/$id/read'), headers: _headers);
+    final res = await http.post(_uri('/notifications/$id/read'), headers: _headers).timeout(_timeout);
     _decode(res);
   }
 
@@ -463,7 +475,7 @@ class ApiService {
 
   Future<AppUser> updateProfile({required String name, required String email}) async {
     final res = await http.patch(_uri('/profile'),
-        headers: _headers, body: jsonEncode({'name': name, 'email': email}));
+        headers: _headers, body: jsonEncode({'name': name, 'email': email})).timeout(_timeout);
     return AppUser.fromJson(_decode(res)['user']);
   }
 
@@ -477,27 +489,27 @@ class ApiService {
           'current_password': currentPassword,
           'password': password,
           'password_confirmation': password,
-        }));
+        })).timeout(_timeout);
     return _decode(res)['message'] ?? 'Password updated.';
   }
 
   // ---- Chat --------------------------------------------------------------
 
   Future<List<ChatPartner>> chatPartners() async {
-    final res = await http.get(_uri('/chat/partners'), headers: _headers);
+    final res = await http.get(_uri('/chat/partners'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['partners'] as List).map((e) => ChatPartner.fromJson(e)).toList();
   }
 
   Future<List<Message>> messages(int userId) async {
-    final res = await http.get(_uri('/chat/$userId/messages'), headers: _headers);
+    final res = await http.get(_uri('/chat/$userId/messages'), headers: _headers).timeout(_timeout);
     final data = _decode(res);
     return (data['messages'] as List).map((e) => Message.fromJson(e)).toList();
   }
 
   Future<List<Message>> sendMessage(int userId, String body) async {
     final res = await http.post(_uri('/chat/$userId/messages'),
-        headers: _headers, body: jsonEncode({'body': body}));
+        headers: _headers, body: jsonEncode({'body': body})).timeout(_timeout);
     final data = _decode(res);
     return (data['messages'] as List).map((e) => Message.fromJson(e)).toList();
   }

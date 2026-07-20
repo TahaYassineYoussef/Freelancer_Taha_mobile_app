@@ -1,7 +1,10 @@
+import 'dart:convert';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'api_service.dart';
 
@@ -13,6 +16,9 @@ import 'api_service.dart';
 Future<void> _onBackgroundMessage(RemoteMessage message) async {
   await Firebase.initializeApp();
   if (message.data['type'] == 'call') {
+    // Persist first, so the UI can ring the instant the app wakes — the
+    // full-screen intent launches us before the poll would have run.
+    await PushService.savePendingCall(message.data);
     await PushService.showIncomingCall(message.data);
   }
 }
@@ -61,7 +67,10 @@ class PushService {
       // Foreground: CallState's poll will pick the offer up within seconds, so
       // just surface the notification for a phone sitting on a desk.
       FirebaseMessaging.onMessage.listen((m) {
-        if (m.data['type'] == 'call') showIncomingCall(m.data);
+        if (m.data['type'] == 'call') {
+          savePendingCall(m.data);
+          showIncomingCall(m.data);
+        }
       });
 
       debugPrint('PUSH: requesting FCM token…');
@@ -120,4 +129,30 @@ class PushService {
 
   /// Clears the ringing notification once the call is answered or gone.
   static Future<void> clearIncomingCall() => _notifications.cancel(id: 1);
+
+  // ---- Pending call hand-off ---------------------------------------------
+
+  /// Stashes the pushed call so the UI can ring immediately on wake, rather
+  /// than waiting for the next signalling poll.
+  static Future<void> savePendingCall(Map<String, dynamic> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('pending_call', jsonEncode({
+      ...data,
+      'ts': DateTime.now().millisecondsSinceEpoch,
+    }));
+  }
+
+  /// Returns and clears a fresh pending call (ignoring anything older than a
+  /// minute, which is a call that has already rung out).
+  static Future<Map<String, dynamic>?> takePendingCall() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('pending_call');
+    if (raw == null) return null;
+    await prefs.remove('pending_call');
+
+    final m = jsonDecode(raw) as Map<String, dynamic>;
+    final ts = m['ts'] as int? ?? 0;
+    if (DateTime.now().millisecondsSinceEpoch - ts > 60000) return null;
+    return m;
+  }
 }

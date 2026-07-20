@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../models.dart';
 import '../state/auth.dart';
+import '../state/call_state.dart';
 import '../theme.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -154,7 +155,25 @@ class _ChatThreadScreenState extends State<ChatThreadScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.partner.name)),
+      appBar: AppBar(
+        title: Text(widget.partner.name),
+        actions: [
+          IconButton(
+            tooltip: 'Voice call',
+            icon: const Icon(Icons.call),
+            onPressed: () => context
+                .read<CallState>()
+                .callUser(widget.partner.id, widget.partner.name, video: false),
+          ),
+          IconButton(
+            tooltip: 'Video call',
+            icon: const Icon(Icons.videocam),
+            onPressed: () => context
+                .read<CallState>()
+                .callUser(widget.partner.id, widget.partner.name, video: true),
+          ),
+        ],
+      ),
       body: Column(
         children: [
           Expanded(

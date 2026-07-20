@@ -1,19 +1,16 @@
-import 'dart:async';
-
-import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 
-import '../config.dart';
-import '../services/private_tab.dart';
+import '../services/api_service.dart';
 import '../state/auth.dart';
 
 /// "Continue with Google", mirroring the web site's button.
 ///
-/// Google blocks OAuth inside embedded web views, so the flow runs in a private
-/// (ephemeral) browser tab against the site's existing Socialite routes. When
-/// it finishes, the server redirects to `freelancertaha://auth?token=…`, which
-/// Android hands back to the app and we swap for a signed-in session.
+/// Uses native Google Sign-In rather than a browser redirect: Google Play
+/// Services returns an ID token straight to the app, which the server verifies.
+/// That sidesteps OAuth redirect URIs entirely — they can only be a public
+/// hostname or loopback, never the LAN address a real phone talks to.
 class GoogleSignInButton extends StatefulWidget {
   const GoogleSignInButton({super.key});
 
@@ -21,72 +18,71 @@ class GoogleSignInButton extends StatefulWidget {
   State<GoogleSignInButton> createState() => _GoogleSignInButtonState();
 }
 
-class _GoogleSignInButtonState extends State<GoogleSignInButton>
-    with WidgetsBindingObserver {
-  StreamSubscription<Uri>? _links;
+class _GoogleSignInButtonState extends State<GoogleSignInButton> {
   bool _busy = false;
+  bool _ready = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    // Listen for the deep link the browser tab redirects to.
-    _links = AppLinks().uriLinkStream.listen(_onLink, onError: (_) {});
+    _init();
   }
 
-  @override
-  void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
-    _links?.cancel();
-    super.dispose();
-  }
+  // The Firebase "Web" OAuth client (client_type 3 in google-services.json).
+  // Native sign-in mints its ID token for this audience, which is what the
+  // backend verifies against.
+  static const _serverClientId =
+      '784467110916-9q7u3isane98cc4tg4e2uln365q2tti0.apps.googleusercontent.com';
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Coming back with no deep link means the user dismissed the browser tab,
-    // so clear the waiting state instead of spinning forever.
-    if (state == AppLifecycleState.resumed && _busy && mounted) {
-      setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _onLink(Uri uri) async {
-    if (uri.scheme != 'freelancertaha' || uri.host != 'auth') return;
-
-    final token = uri.queryParameters['token'];
-    if (!mounted) return;
-
-    if (token == null || token.isEmpty) {
-      setState(() => _busy = false);
-      _say('Google sign-in was cancelled.');
-      return;
-    }
-
+  Future<void> _init() async {
     try {
-      await context.read<AuthState>().signInWithToken(token);
-      // A successful sign-in swaps the whole screen, so nothing else to do.
+      await GoogleSignIn.instance.initialize(serverClientId: _serverClientId);
+      if (mounted) setState(() => _ready = true);
     } catch (_) {
-      if (mounted) _say('Could not complete Google sign-in.');
-    } finally {
-      if (mounted) setState(() => _busy = false);
+      // Play Services missing or the app isn't registered in the console;
+      // the button stays disabled rather than failing on tap.
     }
   }
 
   void _say(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   Future<void> _start() async {
     setState(() => _busy = true);
+    final auth = context.read<AuthState>();
+
     try {
-      // Loopback, not the emulator alias: Google redirects back to 127.0.0.1
-      // and the OAuth session must stay on one host. See config.oauthOrigin.
-      await PrivateTab.open(Uri.parse('$oauthOrigin/auth/google/mobile'));
-    } catch (_) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _say('Could not open the browser for Google sign-in.');
+      debugPrint('GSI: calling authenticate()');
+      final account = await GoogleSignIn.instance.authenticate();
+      debugPrint('GSI: account = ${account.email}');
+      final idToken = account.authentication.idToken;
+      debugPrint('GSI: idToken = ${idToken == null ? "NULL" : "${idToken.length} chars"}');
+
+      if (idToken == null) {
+        _say('Google did not return a sign-in token.');
+        return;
       }
+
+      debugPrint('GSI: posting idToken to backend…');
+      await auth.signInWithGoogle(idToken);
+      debugPrint('GSI: backend accepted, signed in');
+      // Success swaps the whole screen, so there is nothing more to do here.
+    } on GoogleSignInException catch (e) {
+      debugPrint('GSI ERROR: GoogleSignInException code=${e.code.name} desc=${e.description}');
+      if (e.code != GoogleSignInExceptionCode.canceled) {
+        _say('Google sign-in failed: ${e.code.name}');
+      }
+    } on ApiException catch (e) {
+      debugPrint('GSI ERROR: ApiException ${e.message}');
+      _say(e.message);
+    } catch (e, st) {
+      debugPrint('GSI ERROR: ${e.runtimeType} :: $e');
+      debugPrint('GSI STACK: $st');
+      _say('Could not complete Google sign-in.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -98,12 +94,12 @@ class _GoogleSignInButtonState extends State<GoogleSignInButton>
       width: double.infinity,
       height: 48,
       child: OutlinedButton.icon(
-        onPressed: _busy ? null : _start,
+        onPressed: _busy || !_ready ? null : _start,
         icon: _busy
             ? const SizedBox(
                 height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
             : const _GoogleGlyph(),
-        label: Text(_busy ? 'Waiting for Google…' : 'Continue with Google'),
+        label: Text(_busy ? 'Signing in…' : 'Continue with Google'),
         style: OutlinedButton.styleFrom(
           backgroundColor: Colors.white,
           foregroundColor: const Color(0xFF3C4043),

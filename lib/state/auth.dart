@@ -38,7 +38,13 @@ class AuthState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Completes a Google sign-in that finished in the web view.
+  /// Signs in with an ID token from native Google Sign-In.
+  Future<void> signInWithGoogle(String idToken) async {
+    user = await api.loginWithGoogle(idToken);
+    notifyListeners();
+  }
+
+  /// Completes a Google sign-in that finished out-of-band.
   Future<void> signInWithToken(String token) async {
     user = await api.adoptToken(token);
     notifyListeners();
