@@ -21,10 +21,30 @@ class CallState extends ChangeNotifier {
   final ApiService api;
   CallState(this.api);
 
+  // STUN discovers each peer's public address; TURN *relays* the media when the
+  // two ends are on different networks (e.g. phone on 4G, browser on Wi-Fi),
+  // which STUN alone cannot bridge. The openrelay project is a free public TURN
+  // for development — swap in your own (coturn / Twilio / Metered) for
+  // production reliability.
   static const _iceServers = {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject',
+      },
     ],
   };
 
@@ -322,9 +342,11 @@ class CallState extends ChangeNotifier {
     };
 
     pc.onConnectionState = (state) {
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
-        _teardown();
+      // A failed connection must tell the other end, or it keeps ringing with
+      // nobody there. (Closed is us tearing down — ignore, no signal needed.)
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        error = 'Connection lost.';
+        hangUp();
       }
     };
 
@@ -364,6 +386,9 @@ class CallState extends ChangeNotifier {
     PushService.clearIncomingCall();
     _ticker?.cancel();
     _ticker = null;
+    // Drop the state callback before closing, so our own close() doesn't
+    // bounce back through onConnectionState → hangUp → teardown again.
+    _pc?.onConnectionState = null;
     _pc?.close();
     _pc = null;
     for (final t in _localStream?.getTracks() ?? <MediaStreamTrack>[]) {
